@@ -20,4 +20,4 @@ Documentation/
 .project
 .pydevproject
 .idea/
-
+.vim_*

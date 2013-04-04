@@ -134,6 +134,7 @@ class Consumer(object):
             'celery.worker.consumer:Tasks',
             'celery.worker.consumer:Evloop',
             'celery.worker.consumer:Agent',
+            'celery.worker.consumer:Kikyo'
         ]
 
         def shutdown(self, parent):
@@ -662,3 +663,17 @@ class Evloop(bootsteps.StartStopStep):
 
     def start(self, c):
         c.loop(*c.loop_args())
+
+class Kikyo(bootsteps.StartStopStep):
+    label = 'kikyo'
+
+    def __init__(self, c, **kwargs):
+        pass
+    def include_if(self, c):
+        # TODO(liwei) : include if kikyo is enabled in the configuration file
+        return True
+    def create(self, c):
+        kikyo = c.kikyo = self.instantiate('celery.worker.kikyo:Consumer',
+                                           c.app.kikyo,
+                                           c.pool)
+        return kikyo

@@ -31,8 +31,9 @@ from celery.exceptions import (
 )
 from celery.five import string_t, values
 from celery.utils import nodename, nodesplit, worker_direct
-from celery.utils.imports import reload_from_cwd
+from celery.utils.imports import reload_from_cwd, instantiate
 from celery.utils.log import mlevel, worker_logger as logger
+from celery.kikyo import Kikyo
 
 from . import state
 
@@ -76,6 +77,7 @@ class WorkController(configurated):
     state_db = from_config()
     disable_rate_limits = from_config()
     worker_lost_wait = from_config()
+    kikyo = from_config()
 
     pidlock = None
 
@@ -99,7 +101,6 @@ class WorkController(configurated):
             'celery.worker.autoscale:WorkerComponent',
             'celery.worker.autoreload:WorkerComponent',
             'celery.worker.mediator:WorkerComponent',
-
         ])
 
     def __init__(self, app=None, hostname=None, **kwargs):
@@ -117,6 +118,7 @@ class WorkController(configurated):
         self.setup_defaults(kwargs, namespace='celeryd')
         self.setup_queues(queues)
         self.setup_includes(include)
+        self.setup_kikyo()
 
         # Set default concurrency
         if not self.concurrency:
@@ -195,6 +197,20 @@ class WorkController(configurated):
         task_modules = set(task.__class__.__module__
                            for task in values(self.app.tasks))
         self.app.conf.CELERY_INCLUDE = tuple(set(inc) | task_modules)
+
+
+    def setup_kikyo(self):
+        kconf = self.app.conf.CELERY_KIKYO_DEFAULT
+        priority = self.app.conf.CELERY_KIKYO_PRIORITY
+
+        if kconf:
+            if isinstance(kconf, dict):
+                self.app.kikyo = Kikyo(kconf, priority)
+            else:
+                self.app.kikyo = Kikyo(instantiate(kconf)(), priority)
+        else:
+            self.app.kikyo = Kikyo(priority=priority)
+
 
     def prepare_args(self, **kwargs):
         return kwargs
