@@ -13,13 +13,24 @@ def add(x, y, raise_exc=False):
     if raise_exc:
         raise Exception("test")
     return x + y
-
+rate_limit = "200/s"
 @celery.task(name='tasks.minus')
 def minus(x, y, raise_exc=False):
     def callback(ret):
-        print ret
-    _minus.apply_async(args=(x,y),
-                       link=callback)
+        pass
+    _minus.apply_async(qkey="minus",args=(x,y),
+                       link=callback,
+                       touch=True,
+                       rate_limit=rate_limit)
+@celery.task(name='tasks.minus')
+def multi_minus(x, y, num):
+    for i in xrange(num):
+        def callback(ret):
+            pass
+        _minus.apply_async(qkey="minus", args=(x,y),
+                           link=callback,
+                           touch=True,
+                           rate_limit=rate_limit)
 
 @celery.async(name='tasks.minus.async')
 def _minus(x, y):
