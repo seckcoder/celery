@@ -1,0 +1,3 @@
+BROKER_URL="redis://localhost:6379/0"
+CELERYD_POOL = "gevent"
+CELERY_CONCURRENCY = 1
