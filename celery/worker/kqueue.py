@@ -10,7 +10,7 @@ from __future__ import absolute_import
 
 # Note that the thread should be monkey patched
 import threading
-from time import time
+from time import sleep, time
 from Queue import PriorityQueue
 from operator import attrgetter
 from .buckets import TokenBucketQueue, FastQueue, RateLimitExceeded
@@ -98,13 +98,13 @@ class KGroupQueueAbstract(object):
         """
         Find a kq to get
         """
-        return self._next_kq(key=key, next=self._nextget, notfound_exc=KQueueNotFound)
+        return self._next_kq(key=key, next=self._nextget, notfound_exc=Empty)
 
     def _kq_toput(self, key=None):
         """
         Find a kq to put
         """
-        return self._next_kq(key=key, next=self._nextput, notfound_exc=Empty)
+        return self._next_kq(key=key, next=self._nextput, notfound_exc=KQueueNotFound)
 
     def put(self, item, key=None):
         kq = self._kq_toput(key)
@@ -159,7 +159,7 @@ class KGroupQueueAbstract(object):
                 if remaining_time:
                     if not block or (timeout and time() - tstart > timeout):
                         raise Empty()
-                    time.sleep(min(remaining_time, timeout or 1))
+                    sleep(min(remaining_time, timeout or 1))
                 else:
                     return priority_item[1]
 
