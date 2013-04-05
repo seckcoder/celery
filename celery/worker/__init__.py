@@ -16,6 +16,8 @@ import socket
 import sys
 import traceback
 
+from collections import Callable
+
 from billiard import cpu_count
 from billiard.util import Finalize
 from kombu.syn import detect_environment
@@ -77,7 +79,6 @@ class WorkController(configurated):
     state_db = from_config()
     disable_rate_limits = from_config()
     worker_lost_wait = from_config()
-    kikyo = from_config()
 
     pidlock = None
 
@@ -206,6 +207,8 @@ class WorkController(configurated):
         if kconf:
             if isinstance(kconf, dict):
                 self.app.kikyo = Kikyo(kconf, priority)
+            elif isinstance(kconf, Callable):
+                self.app.kikyo = Kikyo(kconf(), priority)
             else:
                 self.app.kikyo = Kikyo(instantiate(kconf)(), priority)
         else:

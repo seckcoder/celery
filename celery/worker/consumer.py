@@ -674,6 +674,7 @@ class Kikyo(bootsteps.StartStopStep):
         return True
     def create(self, c):
         kikyo = c.kikyo = self.instantiate('celery.worker.kikyo:Consumer',
+                                           c.app,
                                            c.app.kikyo,
                                            c.pool)
         return kikyo
