@@ -15,7 +15,7 @@ def add(x, y, raise_exc=False):
     return x + y
 
 @celery.task(name='tasks.minus')
-def minus(x, y):
+def minus(x, y, raise_exc=False):
     def callback(ret):
         print ret
     _minus.apply_async(args=(x,y),
@@ -23,4 +23,5 @@ def minus(x, y):
 
 @celery.async(name='tasks.minus.async')
 def _minus(x, y):
+    # Note _minus can only be called on the worker side
     return x - y
