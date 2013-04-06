@@ -891,7 +891,7 @@ class BlockingConsumer(Consumer):
                     raise
 
 class Kikyo(StartStopComponent):
-    label = 'kikyo'
+    name = 'worker.consumer.kikyo'
 
     def __init__(self, c, **kwargs):
         pass

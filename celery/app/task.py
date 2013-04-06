@@ -848,7 +848,6 @@ class AsyncTaskType(type):
         instance.bind(app)
         return instance.__class__
 
-@with_metaclass(AsyncTaskType)
 class AsyncTask(object):
     """AsyncTask base class.
 
@@ -856,6 +855,7 @@ class AsyncTask(object):
     coroutines(gevent/eventlet)
     """
 
+    __metaclass__ = AsyncTaskType
     __trace__ = None
 
     __self__ = None

@@ -20,3 +20,4 @@ def benchmark():
 
     that = time.time()
     print that - then
+benchmark()
