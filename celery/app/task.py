@@ -33,6 +33,7 @@ extract_exec_options = mattrgetter(
 )
 
 
+
 class Context(object):
     # Default context
     logfile = None
@@ -82,6 +83,30 @@ class Context(object):
             self._children = []
         return self._children
 
+
+class AsyncTaskContext(object):
+    name = None
+    args = None
+    kwargs = None
+    callbacks = None
+    err_callbacks = None
+    rate_limit = None
+    time_limit = None
+
+    def __init__(self, *args, **kwargs):
+        self.update(*args, **kwargs)
+
+    def update(self, *args, **kwargs):
+        self.__dict__.update(*args, **kwargs)
+
+    def clear(self):
+        self.__dict__.clear()
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def __repr__(self):
+        return '<AsyncTaskContext:{0!r}>'.format(vars(self))
 
 class TaskType(type):
     """Meta class for tasks.
@@ -798,4 +823,96 @@ class Task(object):
     @property
     def __name__(self):
         return self.__class__.__name__
+
+
+class AsyncTaskType(type):
+
+    def __new__(cls, name, bases, attrs):
+        new = super(AsyncTaskType, cls).__new__
+
+        task_module = attrs.get('__module__') or '__main__'
+
+        _app1, _app2 = attrs.pop('_app', None), attrs.pop('app', None)
+        app = attrs['_app'] = _app1 or _app2 or current_app
+        task_name = attrs.get('name')
+        if not task_name:
+            attrs['name'] = task_name = gen_task_name(app, name, task_module) + '_async'
+
+        tasks = app._async_tasks
+        if task_name not in tasks:
+            tasks.register(new(cls, name, bases, attrs))
+
+        instance = tasks[task_name]
+        instance.bind(app)
+        return instance.__class__
+
+@with_metaclass(AsyncTaskType)
+class AsyncTask(object):
+    """AsyncTask base class.
+
+    AsyncTask is used to asynchoronously execute the task in worker with 
+    coroutines(gevent/eventlet)
+    """
+
+    __trace__ = None
+
+    __self__ = None
+
+    _app = None
+
+    name = None
+
+    abstract = True
+
+    rate_limit = None
+
+    # throw an timeout exception when we can't finish the task in time_limit
+    time_limit = None
+
+    __bound__ = False
+
+    # As the asynctasks are all executed on the worker side, so thereis
+    # no need to specify the backend
+    from_config = (
+        ('rate_limit', 'CELERY_KIKYO_DEFAULT_RATE_LIMIT'),
+        ('time_limit', 'CELERY_KIKYO_DEFAULT_TIME_LIMIT'),
+    )
+
+    @classmethod
+    def bind(self, app):
+        was_bound, self.__bound__ = self.__bound__, True
+        self._app = app
+        conf = app.conf
+
+        for attr_name, config_name in self.from_config:
+            if getattr(self, attr_name, None) is None:
+                setattr(self, attr_name, conf[config_name])
+        
+        self.on_bound(app)
+
+        return app
+
+    def __call__(self, *args, **kwargs):
+        if self.__self__ is not None:
+            return self.run(self.__self__, *args, **kwargs)
+        return self.run(*args, **kwargs)
+
+    def apply_async(self, args=None, kwargs=None,
+                    link=None, link_error=None, qkey=None, **options):
+
+        app = self._get_app()   
+        
+        qkey = qkey or self.qkey or "default"
+
+        if self.__self__ is not None:
+            args = (self.__self__, ) + tuple(args)
+        
+        app.kikyo.produce(qkey, AsyncTaskContext(name=self.name,
+                                                 args=args,
+                                                 kwargs=kwargs,
+                                                 callbacks=maybe_list(link),
+                                                 err_callbacks=maybe_list(link_error),
+                                                 time_limit=self.time_limit,
+                                                 rate_limit=self.rate_limit))
+
 BaseTask = Task  # compat alias

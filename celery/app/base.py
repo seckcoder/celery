@@ -67,8 +67,9 @@ class Celery(object):
     def __init__(self, main=None, loader=None, backend=None,
                  amqp=None, events=None, log=None, control=None,
                  set_as_current=True, accept_magic_kwargs=False,
-                 tasks=None, broker=None, include=None, changes=None,
+                 tasks=None, async_tasks=None, broker=None, include=None, changes=None,
                  **kwargs):
+
         self.clock = LamportClock()
         self.main = main
         self.amqp_cls = amqp or self.amqp_cls
@@ -88,8 +89,13 @@ class Celery(object):
         self._finalize_mutex = threading.Lock()
         self._pending = deque()
         self._tasks = tasks
+        self._async_tasks = async_tasks
+
         if not isinstance(self._tasks, TaskRegistry):
             self._tasks = TaskRegistry(self._tasks or {})
+
+        if not isinstance(self._async_tasks, TaskRegistry):
+            self._asyc_tasks = TaskRegistry(self._async_tasks or {})
 
         # these options are moved to the config to
         # simplify pickling of the app object.
@@ -168,6 +174,20 @@ class Celery(object):
             return inner_create_task_cls(**opts)(*args)
         return inner_create_task_cls(**opts)
 
+    def async(self, *args, **opts):
+        """Creats new async task class"""
+        def inner_create_task_cls(**opts):
+            
+            def _create_task_cls(fun):
+                promise = PromiseProxy(self._async_from_fun, (fun, ), opts)
+                return promise
+
+            return _create_task_cls
+
+        if len(args) == 1 and isinstance(args[0], Callable):
+            return inner_create_task_cls(**opts)(*args)
+        return inner_create_task_cls(**opts)
+
     def _task_from_fun(self, fun, **options):
         base = options.pop('base', None) or self.Task
 
@@ -178,6 +198,19 @@ class Celery(object):
             '__doc__': fun.__doc__,
             '__module__': fun.__module__}, **options))()
         task = self._tasks[T.name]  # return global instance.
+        task.bind(self)
+        return task
+    
+    def _async_from_fun(self, fun, **options):
+        base = options.pop('base', None) or self.AsyncTask
+
+        T = type(fun.__name__, (base, ), dict({
+            'app': self,
+            'run': staticmethod(fun),
+            '__doc__': fun.__doc__,
+            '__module__': fun.__module}, **options))()
+
+        task = self._asyc_tasks[T.name]
         task.bind(self)
         return task
 
@@ -369,6 +402,11 @@ class Celery(object):
         taken from this app."""
         return self.subclass_with_self('celery.app.task:Task', name='Task',
                                        attribute='_app', abstract=True)
+    
+    def create_async_task_cls(self):
+        return self.subclass_with_self('celery.app.task:AsyncTask',
+                                       name='AsyncTask',
+                                       attribute='_app', abstract=True)
 
     def subclass_with_self(self, Class, name=None, attribute='app',
                            reverse=None, **kw):
@@ -447,7 +485,11 @@ class Celery(object):
     @cached_property
     def Task(self):
         return self.create_task_cls()
-
+    
+    @cached_property
+    def AsyncTask(self):
+        return self.create_async_task_cls()
+        
     @cached_property
     def annotations(self):
         return prepare_annotations(self.conf.CELERY_ANNOTATIONS)

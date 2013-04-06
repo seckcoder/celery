@@ -30,12 +30,14 @@ from celery.app import app_or_default
 from celery.app.abstract import configurated, from_config
 from celery.exceptions import SystemTerminate, TaskRevokedError
 from celery.utils.functional import noop
-from celery.utils.imports import qualname, reload_from_cwd
+from celery.utils.imports import qualname, reload_from_cwd, instantiate
 from celery.utils.log import get_logger
 from celery.utils.threads import Event
 from celery.utils.timer2 import Schedule
+from celery.kikyo import Kikyo
 
 from . import bootsteps
+
 from . import state
 from .buckets import TaskBucket, AsyncTaskBucket, FastQueue
 from .hub import Hub, BoundedSemaphore
@@ -308,6 +310,7 @@ class WorkController(configurated):
     state_db = from_config()
     disable_rate_limits = from_config()
     worker_lost_wait = from_config()
+    kikyo = from_config()
 
     _state = None
     _running = 0
@@ -315,11 +318,13 @@ class WorkController(configurated):
     def __init__(self, loglevel=None, hostname=None, ready_callback=noop,
                  queues=None, app=None, pidfile=None, use_eventloop=None,
                  **kwargs):
+
         self.app = app_or_default(app or self.app)
 
         self._shutdown_complete = Event()
         self.setup_defaults(kwargs, namespace='celeryd')
         self.app.select_queues(queues)  # select queues subset.
+        self.setup_kikyo()
 
         # Options
         self.loglevel = loglevel or self.loglevel
@@ -347,6 +352,18 @@ class WorkController(configurated):
         self.pool_cls = _concurrency.get_implementation(self.pool_cls)
         self.components = []
         self.namespace = Namespace(app=self.app).apply(self, **kwargs)
+
+    def setup_kikyo(self):
+        kconf = self.app.conf.CELERY_KIKYO_DEFAULT
+        priority = self.app.conf.CELERY_KIKYO_PRIORITY
+
+        if kconf:
+            if isinstance(kconf, dict):
+                self.app.kikyo = Kikyo(kconf, priority)
+            else:
+                self.app.kikyo = Kikyo(instantiate(kconf)(), priority)
+        else:
+            self.app.kikyo = Kikyo(priority=priority)
 
     def start(self):
         """Starts the workers main loop."""

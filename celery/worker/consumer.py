@@ -889,3 +889,17 @@ class BlockingConsumer(Consumer):
             except socket.error:
                 if self._state != CLOSE:            # pragma: no cover
                     raise
+
+class Kikyo(StartStopComponent):
+    label = 'kikyo'
+
+    def __init__(self, c, **kwargs):
+        pass
+    def include_if(self, c):
+        # TODO(liwei) : include if kikyo is enabled in the configuration file
+        return True
+    def create(self, c):
+        kikyo = c.kikyo = self.instantiate('celery.worker.kikyo:Consumer',
+                                           c.app.kikyo,
+                                           c.pool)
+        return kikyo

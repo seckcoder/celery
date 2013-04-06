@@ -163,6 +163,16 @@ NAMESPACES = {
         'SECURITY_CERTIFICATE': Option(type='string'),
         'SECURITY_CERT_STORE': Option(type='string'),
         'WORKER_DIRECT': Option(False, type='bool'),
+        'KIKYO' : {
+            'DEFAULT' : Option(type='dict'),
+            'TASK_TIMEOUT' : Option(type='float'),
+            'DEFAULT_RATE_LIMIT': Option(type='string'),
+            'PRIORITY': Option({
+                'urgent' : 0,
+                'normal' :1,
+                'nonvalid' : -1
+            }, type='dict')
+        }
     },
     'CELERYD': {
         'AUTOSCALER': Option('celery.worker.autoscale.Autoscaler'),
