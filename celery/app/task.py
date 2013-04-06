@@ -829,8 +829,10 @@ class AsyncTaskType(type):
 
     def __new__(cls, name, bases, attrs):
         new = super(AsyncTaskType, cls).__new__
-
         task_module = attrs.get('__module__') or '__main__'
+
+        if attrs.pop('abstract', None) or not attrs.get('autoregister', True):
+            return new(cls, name, bases, attrs)
 
         _app1, _app2 = attrs.pop('_app', None), attrs.pop('app', None)
         app = attrs['_app'] = _app1 or _app2 or current_app
@@ -866,8 +868,13 @@ class AsyncTask(object):
 
     rate_limit = None
 
-    # throw an timeout exception when we can't finish the task in time_limit
-    time_limit = None
+    # kikyo's key
+    qkey = None
+
+    # throw an timeout exception when we can't finish the task in timeout
+    timeout = None
+
+    autoregister = True
 
     __bound__ = False
 
@@ -875,8 +882,11 @@ class AsyncTask(object):
     # no need to specify the backend
     from_config = (
         ('rate_limit', 'CELERY_KIKYO_DEFAULT_RATE_LIMIT'),
-        ('time_limit', 'CELERY_KIKYO_DEFAULT_TIME_LIMIT'),
+        ('timeout', 'CELERY_KIKYO_DEFAULT_TASK_TIMEOUT'),
     )
+
+    class AsyncTaskException(Exception):
+        pass
 
     @classmethod
     def bind(self, app):
@@ -892,27 +902,74 @@ class AsyncTask(object):
 
         return app
 
+    @classmethod
+    def on_bound(self, app):
+        pass
+
+    @classmethod
+    def _get_app(self):
+        if not self.__bound__ or self._app is None:
+            # The app property's __set__  method is not called
+            # if Task.app is set (on the class), so must bind on use.
+            self.bind(current_app)
+        return self._app
+    app = class_property(_get_app, bind)
+
+
     def __call__(self, *args, **kwargs):
         if self.__self__ is not None:
             return self.run(self.__self__, *args, **kwargs)
         return self.run(*args, **kwargs)
 
-    def apply_async(self, args=None, kwargs=None,
-                    link=None, link_error=None, qkey=None, **options):
+    def run(self, *args, **kwargs):
+        """The body of the task executed by workers."""
+        raise NotImplementedError('Tasks must define the run method.')
+
+    def delay(self, *args, **kwargs):
+        """Star argument version of :meth:`apply_async`.
+
+        Does not support the extra options enabled by :meth:`apply_async`.
+
+        :param \*args: positional arguments passed on to the task.
+        :param \*\*kwargs: keyword arguments passed on to the task.
+
+        :returns :class:`celery.result.AsyncResult`:
+
+        """
+        return self.apply_async(args, kwargs)
+
+    def apply_async(self, args=(), kwargs={},
+                    link=None, link_error=None, link_timeout=None,
+                    qkey=None, timeout=None, rate_limit=None, touch=False,
+                    **options):
 
         app = self._get_app()   
         
         qkey = qkey or self.qkey or "default"
 
+        timeout = timeout or self.timeout
+
+        rate_limit = rate_limit or self.rate_limit
+
         if self.__self__ is not None:
             args = (self.__self__, ) + tuple(args)
         
+        if not hasattr(app, 'kikyo'):
+            raise self.AsyncTaskException('Note kikyo should only run on worker side')
+        
+        if touch:
+            app.kikyo.create_channel(qkey, rate_limit)
+
         app.kikyo.produce(qkey, AsyncTaskContext(name=self.name,
                                                  args=args,
                                                  kwargs=kwargs,
                                                  callbacks=maybe_list(link),
                                                  err_callbacks=maybe_list(link_error),
-                                                 time_limit=self.time_limit,
-                                                 rate_limit=self.rate_limit))
+                                                 timeout_callbacks=maybe_list(link_timeout),
+                                                 timeout=self.timeout))
+
+    @property
+    def __name__(self):
+        return self.__class__.__name__
 
 BaseTask = Task  # compat alias

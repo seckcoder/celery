@@ -45,7 +45,31 @@ def apply_timeout(target, args=(), kwargs={}, callback=None,
     except Timeout:
         return timeout_callback(False, timeout)
 
+def apply_localtarget(target, args=(), kwargs={}, callbacks=None,
+                      err_callbacks=None, **_):
+    try:
+        ret = target(*args, **kwargs)
+    except Exception as exc:
+        if err_callbacks:
+            for cb in err_callbacks:
+                cb(exc)
+    else:
+        if callbacks:
+            for cb in callbacks:
+                cb(ret)
 
+def apply_localtimeout(target, args=(), kwargs={}, callbacks=None,
+                      err_callbacks=None, timeout=None,
+                      timeout_callbacks=None, **rest):
+    try:
+        with Timeout(timeout):
+            return apply_localtarget(target, args, kwargs, callbacks,
+                                     err_callbacks, **rest)
+    except Timeout:
+        if timeout_callbacks:
+            for cb in timeout_callbacks:
+                return cb(False, timeout)
+        
 class Schedule(timer2.Schedule):
 
     def __init__(self, *args, **kwargs):
@@ -135,6 +159,16 @@ class TaskPool(BasePool):
                                target, args, kwargs, callback, accept_callback,
                                timeout=timeout,
                                timeout_callback=timeout_callback)
+
+    def on_apply_local_async(self, target, args=None, kwargs=None,
+                             callbacks=None, err_callbacks=None,
+                             timeout=None, timeout_callbacks=None):
+        
+        timeout = self.timeout if timeout is None else timeout
+        return self._quick_put(apply_localtimeout if timeout else apply_localtarget,
+                               target, args, kwargs, callbacks, err_callbacks,
+                               timeout=timeout,
+                               timeout_callbacks=timeout_callbacks)
 
     def grow(self, n=1):
         self._pool._semaphore.counter += n

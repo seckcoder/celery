@@ -95,7 +95,7 @@ class Celery(object):
             self._tasks = TaskRegistry(self._tasks or {})
 
         if not isinstance(self._async_tasks, TaskRegistry):
-            self._asyc_tasks = TaskRegistry(self._async_tasks or {})
+            self._async_tasks = TaskRegistry(self._async_tasks or {})
 
         # these options are moved to the config to
         # simplify pickling of the app object.
@@ -208,9 +208,9 @@ class Celery(object):
             'app': self,
             'run': staticmethod(fun),
             '__doc__': fun.__doc__,
-            '__module__': fun.__module}, **options))()
+            '__module__': fun.__module__}, **options))()
 
-        task = self._asyc_tasks[T.name]
+        task = self._async_tasks[T.name]
         task.bind(self)
         return task
 

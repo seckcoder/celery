@@ -6,15 +6,19 @@
     This module is inspired by celery
 """
 
+from __future__ import absolute_import
+
 # Note that the thread should be monkey patched
 import threading
 from time import time
+from Queue import PriorityQueue
 from operator import attrgetter
 from .buckets import TokenBucketQueue, FastQueue, RateLimitExceeded
-from kikyo.utils.limits import TokenBucket
-from kikyo.five import Empty, items, PriorityQueue, sleep
-from kikyo.utils import timeutils
-from kikyo.local import Proxy
+from kombu.utils.limits import TokenBucket
+from celery.five import Empty, items
+from celery.utils import timeutils
+from celery.local import Proxy
+from celery.utils.functional import maybe_list
 
 class KQueueNotFound(Exception):
     pass
@@ -72,7 +76,7 @@ class KGroupQueueAbstract(object):
     def _nextget(self):
         queues = [q for q in self._getqueues() if not q.empty()]
         if not queues:
-            raise Empty()
+            raise KQueueNotFound()
         cur_get = (self.__lastget__ + 1) % len(queues)
         kq = self.kqmap.values()[cur_get]
         self.__lastget__ = cur_get
@@ -132,7 +136,6 @@ class KGroupQueueAbstract(object):
                     remaining_times.append(q.expected_time())
             else:
                 remaining_times.append(remaining)
-
         try:
             return 0, self._get_immediate()
         except Empty:
@@ -156,7 +159,7 @@ class KGroupQueueAbstract(object):
                 if remaining_time:
                     if not block or (timeout and time() - tstart > timeout):
                         raise Empty()
-                    sleep(min(remaining_time, timeout or 1))
+                    time.sleep(min(remaining_time, timeout or 1))
                 else:
                     return priority_item[1]
 
@@ -167,6 +170,9 @@ class KGroupQueueAbstract(object):
         """
         Make sub groups and queue, the deepest queue will be returned
         """
+        rate_limits = maybe_list(rate_limits)
+        capacities = maybe_list(capacities)
+
         if key:
             keys = key.split('/')
             qkey = keys[-1]
@@ -189,6 +195,9 @@ class KGroupQueueAbstract(object):
         """
         Make sub groups, the deepest group will be returned
         """
+        rate_limits = maybe_list(rate_limits)
+        capacities = maybe_list(capacities)
+
         if key:
             keys = key.split('/')
             qkey = keys[0]

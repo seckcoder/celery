@@ -164,8 +164,8 @@ NAMESPACES = {
         'SECURITY_CERT_STORE': Option(type='string'),
         'WORKER_DIRECT': Option(False, type='bool'),
         'KIKYO' : {
-            'DEFAULT' : Option(type='dict'),
-            'TASK_TIMEOUT' : Option(type='float'),
+            'DEFAULT' : Option(None),
+            'DEFAULT_TASK_TIMEOUT' : Option(type='float'),
             'DEFAULT_RATE_LIMIT': Option(type='string'),
             'PRIORITY': Option({
                 'urgent' : 0,

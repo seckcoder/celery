@@ -137,6 +137,22 @@ class BasePool(object):
                              waitforslot=self.putlocks,
                              callbacks_propagate=self.callbacks_propagate,
                              **options)
+    def apply_local_async(self, target, args=[], kwargs={}, **options):
+        """
+        Apply local async in a worker's local pool
+        """
+
+        if self._does_debug:
+            logger.debug('TaskPool: Apply local async %s (args:%s kwargs:%s)',
+                         target, safe_repr(args), safe_repr(kwargs))
+        
+        return self.on_apply_local_async(target, args, kwargs,
+                                         **options)
+
+    def on_apply_local_async(self, *args, **kwargs):
+
+        raise NotImplementedError(
+            '{0} does not implement apply_local_async'.format(type(self)))
 
     def _get_info(self):
         return {}
